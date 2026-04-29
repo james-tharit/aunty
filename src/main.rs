@@ -1,6 +1,17 @@
 use pcap::Device;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use etherparse::PacketHeaders;
+
+fn format_ip_with_dns(ip: IpAddr) -> String {
+    match dns_lookup::lookup_addr(&ip) {
+        Ok(hostname) => {
+            // Strip domain suffix — only keep the short hostname
+            let short = hostname.split('.').next().unwrap_or(&hostname);
+            format!("{} ({})", short, ip)
+        }
+        Err(_) => ip.to_string(),
+    }
+}
 
 fn main() {
     let mut cap = Device::lookup()
@@ -26,13 +37,13 @@ fn main() {
                 if let Some(net) = headers.net {
                     match net {
                         etherparse::NetHeaders::Ipv4(ipv4, _) => {
-                            source = Ipv4Addr::from(ipv4.source).to_string();
-                            dest = Ipv4Addr::from(ipv4.destination).to_string();
+                            source = format_ip_with_dns(IpAddr::V4(Ipv4Addr::from(ipv4.source)));
+                            dest = format_ip_with_dns(IpAddr::V4(Ipv4Addr::from(ipv4.destination)));
                             proto = String::from("IPv4");
                         }
                         etherparse::NetHeaders::Ipv6(ipv6, _) => {
-                            source = Ipv6Addr::from(ipv6.source).to_string();
-                            dest = Ipv6Addr::from(ipv6.destination).to_string();
+                            source = format_ip_with_dns(IpAddr::V6(Ipv6Addr::from(ipv6.source)));
+                            dest = format_ip_with_dns(IpAddr::V6(Ipv6Addr::from(ipv6.destination)));
                             proto = String::from("IPv6");
                         }
                         etherparse::NetHeaders::Arp(_) => {
@@ -50,6 +61,10 @@ fn main() {
                             info = format!("{}->{}", tcp.source_port, tcp.destination_port);
                         }
                         etherparse::TransportHeader::Udp(udp) => {
+                            // Skip DNS traffic (port 53)
+                            if udp.source_port == 53 || udp.destination_port == 53 {
+                                continue;
+                            }
                             proto = format!("{}/UDP", proto);
                             info = format!("{}->{}", udp.source_port, udp.destination_port);
                         }
@@ -57,7 +72,6 @@ fn main() {
                     }
                 }
 
-                // 3. Pretty Print the row
                 println!(
                     "{:<10} | {:<40} | {:<40} | {:<10} | {:<10}",
                     proto, 

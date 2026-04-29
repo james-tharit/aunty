@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 pcap = "2.4.0"
 etherparse = "0.18"
+dns-lookup = "2"
