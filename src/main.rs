@@ -1,90 +1,100 @@
-use pcap::Device;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use etherparse::PacketHeaders;
+mod app;
+mod packet;
+mod packet_capture;
+mod ui;
 
-fn format_ip_with_dns(ip: IpAddr) -> String {
-    match dns_lookup::lookup_addr(&ip) {
-        Ok(hostname) => {
-            // Strip domain suffix — only keep the short hostname
-            let short = hostname.split('.').next().unwrap_or(&hostname);
-            format!("{} ({})", short, ip)
-        }
-        Err(_) => ip.to_string(),
+use app::App;
+use crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    Terminal,
+};
+use std::sync::mpsc;
+use std::time::Duration;
+use std::io;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    // Create the application
+    let mut app = App::new(500); // Keep last 500 packets in memory
+
+    // Create communication channel
+    let (tx, rx) = mpsc::channel::<packet::PacketInfo>();
+
+    // Start the packet capture thread
+    packet_capture::start_capture_thread(tx);
+
+    // Main event loop
+    let result = run_app(&mut terminal, &mut app, rx);
+
+    // Cleanup terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(e) = result {
+        println!("Error: {}", e);
     }
+
+    Ok(())
 }
 
-fn main() {
-    let mut cap = Device::lookup()
-        .unwrap()
-        .expect("No device found")
-        .open()
-        .unwrap();
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    rx: std::sync::mpsc::Receiver<packet::PacketInfo>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    loop {
+        // Render the UI
+        terminal.draw(|f| {
+            ui::draw(f, app);
+        })?;
 
-    println!("{:<10} | {:<40} | {:<40} | {:<10} | {:<10}", "Proto", "Source", "Destination", "Info/Port", "Length");
-    println!("{:-<115}", "");
-
-    while let Ok(packet) = cap.next_packet() {
-        // Parse the packet data starting from the Ethernet layer
-        match PacketHeaders::from_ethernet_slice(&packet.data) {
-            Ok(headers) => {
-                let mut source = String::from("Unknown");
-                let mut dest = String::from("Unknown");
-                let mut proto = String::from("Other");
-                let mut info = String::from("-");
-                
-
-                // 1. IP Layer Info
-                if let Some(net) = headers.net {
-                    match net {
-                        etherparse::NetHeaders::Ipv4(ipv4, _) => {
-                            source = format_ip_with_dns(IpAddr::V4(Ipv4Addr::from(ipv4.source)));
-                            dest = format_ip_with_dns(IpAddr::V4(Ipv4Addr::from(ipv4.destination)));
-                            proto = String::from("IPv4");
-                        }
-                        etherparse::NetHeaders::Ipv6(ipv6, _) => {
-                            source = format_ip_with_dns(IpAddr::V6(Ipv6Addr::from(ipv6.source)));
-                            dest = format_ip_with_dns(IpAddr::V6(Ipv6Addr::from(ipv6.destination)));
-                            proto = String::from("IPv6");
-                        }
-                        etherparse::NetHeaders::Arp(_) => {
-                            proto = String::from("ARP");
-                        }
+        // Non-blocking input event loop with timeout
+        if crossterm::event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        app.should_quit = true;
                     }
-                }
-
-                // 2. Transport Layer Info (Ports)
-                if let Some(transport) = headers.transport {
-                    #[allow(unreachable_patterns)]
-                    match transport {
-                        etherparse::TransportHeader::Tcp(tcp) => {
-                            proto = format!("{}/TCP", proto);
-                            info = format!("{}->{}", tcp.source_port, tcp.destination_port);
-                        }
-                        etherparse::TransportHeader::Udp(udp) => {
-                            // Skip DNS traffic (port 53)
-                            if udp.source_port == 53 || udp.destination_port == 53 {
-                                continue;
-                            }
-                            proto = format!("{}/UDP", proto);
-                            info = format!("{}->{}", udp.source_port, udp.destination_port);
-                        }
-                        _ => {}
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        app.select_up();
                     }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        app.select_down();
+                    }
+                    KeyCode::Char(' ') => {
+                        app.toggle_pause();
+                    }
+                    _ => {}
                 }
-
-                println!(
-                    "{:<10} | {:<40} | {:<40} | {:<10} | {:<10}",
-                    proto, 
-                    source, 
-                    dest, 
-                    info, 
-                    packet.header.len
-                );
-            }
-            Err(_) => {
-                // Skips non-ethernet packets or malformed data
-                continue;
             }
         }
+
+        // Process incoming packets from the capture thread
+        // Use try_recv to avoid blocking
+        while let Ok(packet) = rx.try_recv() {
+            app.add_packet(packet);
+        }
+
+        if app.should_quit {
+            break;
+        }
     }
+
+    Ok(())
 }
