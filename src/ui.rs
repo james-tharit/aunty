@@ -2,13 +2,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Alignment},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, List, ListItem},
+    widgets::{Block, Borders, Paragraph, List, ListItem, ListState}, // Added ListState
     Frame,
 };
 use crate::app::App;
 
 /// Draw the entire TUI
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -60,22 +60,12 @@ fn draw_header(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     f.render_widget(header, area);
 }
 
-/// Draw the packet list
-fn draw_packet_list(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+/// Draw the packet list with built-in scrolling support
+fn draw_packet_list(f: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let items: Vec<ListItem> = app
         .packets
         .iter()
-        .enumerate()
-        .map(|(idx, packet)| {
-            let style = if idx == app.selected_index {
-                Style::default()
-                    .bg(Color::DarkGray)
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-
+        .map(|packet| {
             let content = format!(
                 "{:<10} | {:<30} | {:<30} | {:<10} | {}B",
                 packet.protocol, 
@@ -85,19 +75,37 @@ fn draw_packet_list(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 packet.length
             );
 
-            ListItem::new(content).style(style)
+            ListItem::new(content)
         })
         .collect();
 
+    // Configure your list and use built-in highlight styling 
+    // instead of manually calculating indices inside map()
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Captured Packets"),
         )
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(Color::White))
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        );
 
-    f.render_widget(list, area);
+    // 1. Sync your app's manual selected_index into Ratatui's ListState
+    let mut list_state = ListState::default();
+    if !app.packets.is_empty() {
+        list_state.select(Some(app.selected_index));
+    } else {
+        list_state.select(None);
+    }
+
+    // 2. CRITICAL: Use render_stateful_widget instead of render_widget
+    // This forces Ratatui to manage viewport tracking / tracking scroll offsets.
+    f.render_stateful_widget(list, area, &mut list_state);
 
     // Draw selected packet details on the right if there's space
     if area.width > 150 {
