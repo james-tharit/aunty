@@ -12,16 +12,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let [left, right] = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(main);
 
     let title = format!(
-        " {} · {} endpoints · {} packets seen{} ",
+        " {} · app: {} · {} endpoints · {} packets seen{} ",
         app.device.as_deref().unwrap_or("-"),
-        app.endpoints.len(),
+        app.filter.as_deref().unwrap_or("all"),
+        app.visible().len(),
         crate::capture::SEEN.load(std::sync::atomic::Ordering::Relaxed),
         if app.paused { " · PAUSED" } else { "" }
     );
     let items: Vec<ListItem> = app
-        .endpoints
+        .visible()
         .iter()
-        .map(|e| ListItem::new(format!("{}  [{}]", e.host, e.sources.iter().copied().collect::<Vec<_>>().join("+"))))
+        .map(|e| {
+            let apps = e.apps.iter().cloned().collect::<Vec<_>>().join(",");
+            ListItem::new(format!("{}  [{}] {}", e.host, e.sources.iter().copied().collect::<Vec<_>>().join("+"), apps))
+        })
         .collect();
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(title))
@@ -36,7 +40,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     f.render_widget(pane, right);
 
     let footer = if app.root {
-        Paragraph::new("hover/↑↓ select · space pause · q quit").style(Style::new().fg(Color::Gray))
+        Paragraph::new("hover/↑↓ select · a app filter · space pause · q quit").style(Style::new().fg(Color::Gray))
     } else {
         Paragraph::new(WARN).style(Style::new().fg(Color::Yellow))
     };
@@ -80,6 +84,7 @@ fn details(e: &Endpoint) -> Text<'static> {
     let mut t = vec![
         Line::styled(e.host.clone(), Style::new().add_modifier(Modifier::BOLD)),
         Line::raw(format!("{} packets · {} B", e.packets, e.bytes)),
+        Line::raw(format!("apps: {}", if e.apps.is_empty() { "unknown".into() } else { e.apps.iter().cloned().collect::<Vec<_>>().join(", ") })),
         Line::raw(""),
         head("IP addresses"),
     ];

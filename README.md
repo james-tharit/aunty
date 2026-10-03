@@ -8,6 +8,6 @@ cargo build --release
 sudo ./target/release/aunty [interface]   # no interface: pick one in the TUI
 ```
 
-Keys: mouse hover or ↑↓ select, space pause, q quit.
+Keys: mouse hover or ↑↓ select, `a` cycle app filter, space pause, q quit.
 
-Limits: HTTPS is encrypted (hostname only); HTTP/3 (QUIC) is not parsed.
+Limits: HTTPS is encrypted (hostname only); HTTP/3 (QUIC) is not parsed; app names come from `/proc` (Linux only, best effort; DNS shows the resolver).

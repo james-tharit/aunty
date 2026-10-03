@@ -3,6 +3,7 @@
 //! Usage: sudo aunty [interface]   (no interface: pick one in the TUI)
 mod app;
 mod capture;
+mod proc;
 mod ui;
 
 use crossterm::{
@@ -66,6 +67,7 @@ fn run(
                             start(&mut app, name, &tx);
                         }
                     }
+                    KeyCode::Char('a') => app.next_app(),
                     KeyCode::Char(' ') => app.paused = !app.paused,
                     _ => {}
                 },

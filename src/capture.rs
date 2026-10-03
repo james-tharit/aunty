@@ -17,6 +17,7 @@ pub struct Hit {
     pub port: u16,
     pub bytes: u32,
     pub http: Option<Http>,
+    pub app: Option<String>, // owning process, if still resolvable
 }
 
 #[derive(Clone)]
@@ -57,19 +58,20 @@ fn inspect(data: &[u8], bytes: u32) -> Option<Hit> {
         _ => None,
     };
     let body = h.payload.slice();
-    let (port, source, host, http, ip) = match h.transport? {
+    let (port, local, source, host, http, ip) = match h.transport? {
         Tcp(t) => match sni(body) {
-            Some(host) => (t.destination_port, "TLS", host, None, ip),
+            Some(host) => (t.destination_port, t.source_port, "TLS", host, None, ip),
             None => {
                 let (host, req) = http(body)?;
-                (t.destination_port, "HTTP", host, Some(req), ip)
+                (t.destination_port, t.source_port, "HTTP", host, Some(req), ip)
             }
         },
         // dest of a DNS query is the resolver, not the host
-        Udp(u) if u.destination_port == 53 => (53, "DNS", dns_query(body)?, None, None),
+        Udp(u) if u.destination_port == 53 => (53, u.source_port, "DNS", dns_query(body)?, None, None),
         _ => return None,
     };
-    Some(Hit { host, source, ip, port, bytes, http })
+    let app = crate::proc::app_for(source == "DNS", local);
+    Some(Hit { host, source, ip, port, bytes, http, app })
 }
 
 fn take<'a>(b: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
