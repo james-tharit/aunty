@@ -24,13 +24,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // proxy-only mode needs no root
     let mut app = app::App::new(capture::interfaces()?, unsafe { geteuid() } == 0 || (mitm && iface.is_none()));
     if mitm {
-        let l = std::net::TcpListener::bind(PROXY_ADDR)?;
+        let l = std::net::TcpListener::bind(proxy::ADDR)?;
         l.set_nonblocking(true)?;
-        proxy::spawn(l, tx.clone()).map_err(|e| e.to_string())?;
+        let dir = proxy::dir();
+        proxy::spawn(l, &dir, tx.clone()).map_err(|e| e.to_string())?;
+        let (profile, note) = proxy::firefox_profile(&dir);
+        app.browsers = vec![
+            app::BrowserCmd { name: "Firefox", cmd: format!("firefox --no-remote --profile {}", profile.display()), note },
+            app::BrowserCmd {
+                name: "Chrome",
+                cmd: format!("chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome", proxy::ADDR),
+                note: "Certificate errors are ignored in this throwaway profile.".into(),
+            },
+        ];
         app.mitm = true;
         app.show_cmd = true;
         if iface.is_none() {
-            app.device = Some(format!("MITM proxy {PROXY_ADDR}"));
+            app.device = Some(format!("MITM proxy {}", proxy::ADDR));
         }
     }
     if let Some(name) = iface {
@@ -47,8 +57,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
-
-const PROXY_ADDR: &str = "127.0.0.1:8080";
 
 extern "C" {
     fn geteuid() -> u32;
@@ -100,8 +108,12 @@ fn run(
             match event::read()? {
                 Event::Key(k) if app.show_cmd => match k.code {
                     KeyCode::Enter => {
-                        copy(Some(app::BROWSER_CMD.into()));
+                        copy(Some(app.browsers[app.browser].cmd.clone()));
                         app.copied = true;
+                    }
+                    KeyCode::Tab => {
+                        app.browser = (app.browser + 1) % app.browsers.len();
+                        app.copied = false;
                     }
                     KeyCode::Char('q') => return Ok(()),
                     _ => app.show_cmd = false,

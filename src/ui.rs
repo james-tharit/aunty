@@ -1,4 +1,4 @@
-use crate::app::{App, Endpoint, BROWSER_CMD};
+use crate::app::{App, Endpoint};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -71,8 +71,9 @@ fn centered(a: Rect, w: u16, h: u16) -> Rect {
 }
 
 fn cmd_box(f: &mut Frame, app: &App) {
-    let area = centered(f.area(), 80, 10);
-    let block = Block::default().borders(Borders::ALL).title(" Start a browser through the proxy ");
+    let b = &app.browsers[app.browser];
+    let area = centered(f.area(), 100, 14);
+    let block = Block::default().borders(Borders::ALL).title(format!(" Start {} through the proxy ", b.name));
     let inner = block.inner(area);
     f.render_widget(Clear, area);
     f.render_widget(block, area);
@@ -80,9 +81,14 @@ fn cmd_box(f: &mut Frame, app: &App) {
     let text = vec![
         Line::raw("Run this in another terminal (throwaway profile, not your real one):"),
         Line::raw(""),
-        Line::styled(BROWSER_CMD, Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Line::styled(b.cmd.clone(), Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         Line::raw(""),
-        Line::styled(format!("{status} · any other key closes · b reopens"), Style::new().fg(Color::Gray)),
+        Line::styled(b.note.clone(), Style::new().fg(Color::Yellow)),
+        Line::raw(""),
+        Line::styled(
+            format!("{status} · Tab switch browser ({}) · other key closes · b reopens", app.browsers.iter().map(|b| b.name).collect::<Vec<_>>().join("/")),
+            Style::new().fg(Color::Gray),
+        ),
     ];
     f.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }), inner);
 }
@@ -168,8 +174,9 @@ fn browser_cmd_overlay_renders() {
     let mut app = App::new(vec![], true);
     app.device = Some("proxy".into());
     app.show_cmd = true;
+    app.browsers = vec![crate::app::BrowserCmd { name: "Firefox", cmd: "firefox --profile x".into(), note: String::new() }];
     let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 25)).unwrap();
     term.draw(|f| draw(f, &mut app)).unwrap();
     let screen: String = term.backend().buffer().content().iter().map(|c| c.symbol()).collect();
-    assert!(screen.contains("Start a browser through the proxy") && screen.contains("--proxy-server=127.0.0.1:8080"));
+    assert!(screen.contains("Start Firefox through the proxy") && screen.contains("firefox --profile x"));
 }

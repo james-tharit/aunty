@@ -9,11 +9,7 @@ sudo ./target/release/aunty [interface]   # sniff: hostnames only (HTTPS is encr
 ./target/release/aunty --mitm             # proxy: full HTTPS URLs/headers/body, no root
 ```
 
-MITM mode listens on `127.0.0.1:8080` with a throwaway in-memory CA. Point a browser at it (throwaway profile, never your real one):
-
-```
-chrome --proxy-server=127.0.0.1:8080 --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome
-```
+MITM mode listens on `127.0.0.1:8080`. On start it shows a launch command (Firefox by default, Tab for Chrome; Enter copies it). Firefox uses a throwaway profile in `~/.config/aunty/firefox` and must trust the CA in `~/.config/aunty/ca.pem` once: automatic if `certutil` is installed (`apt install libnss3-tools`), else import it in Settings > Certificates > Authorities. Never point your real profile at it.
 
 Keys: mouse hover or ↑↓ select, `a` cycle app filter, `y` copy details / `u` copy URL to clipboard (OSC 52, e.g. kitty), `b` browser launch command (MITM), space pause, q quit.
 

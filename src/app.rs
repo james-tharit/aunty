@@ -2,8 +2,12 @@ use crate::capture::{Hit, Http};
 use ratatui::{layout::Rect, widgets::ListState};
 use std::{collections::BTreeSet, net::IpAddr};
 
-/// Throwaway-profile browser launch through the MITM proxy (never use your real profile).
-pub const BROWSER_CMD: &str = "chrome --proxy-server=127.0.0.1:8080 --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome";
+/// A throwaway-profile browser launch through the MITM proxy (never use your real profile).
+pub struct BrowserCmd {
+    pub name: &'static str,
+    pub cmd: String,
+    pub note: String,
+}
 
 /// Everything seen so far for one hostname.
 pub struct Endpoint {
@@ -30,6 +34,8 @@ pub struct App {
     pub paused: bool,
     pub mitm: bool,
     pub show_cmd: bool, // overlay with the browser launch command
+    pub browsers: Vec<BrowserCmd>, // first = default
+    pub browser: usize,
     pub copied: bool,
     pub filter: Option<String>, // show only endpoints used by this app
 }
@@ -38,7 +44,7 @@ impl App {
     pub fn new(interfaces: Vec<String>, root: bool) -> Self {
         let mut picker = ListState::default();
         picker.select(Some(0));
-        Self { device: None, interfaces, picker, error: None, root, mitm: false, show_cmd: false, copied: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
+        Self { device: None, interfaces, picker, error: None, root, mitm: false, show_cmd: false, browsers: vec![], browser: 0, copied: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
     }
 
     pub fn add(&mut self, hit: Hit) {
