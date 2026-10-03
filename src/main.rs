@@ -1,7 +1,7 @@
 //! Passive sniffer TUI: lists each hostname the machine talks to,
 //! with IPs, ports and (for plain HTTP) request headers/params/body.
-//! Usage: sudo aunty [interface]   (no interface: pick one in the TUI)
-//!        aunty --mitm              (proxy only, no root; add an interface to sniff too)
+//! Usage: sudo whotalk [interface]   (no interface: pick one in the TUI)
+//!        whotalk --mitm              (proxy only, no root; add an interface to sniff too)
 mod app;
 mod capture;
 mod proc;
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         l.set_nonblocking(true)?;
         proxy::spawn(l, tx.clone()).map_err(|e| e.to_string())?;
         app.browser_cmd = format!(
-            "google-chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome",
+            "google-chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/whotalk-chrome",
             proxy::ADDR
         );
         app.mitm = true;

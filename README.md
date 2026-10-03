@@ -1,12 +1,12 @@
-# aunty
-![usage](./aunty.gif)
+# whotalk
+![usage](./whotalk.gif)
 TUI that lists the hostnames your machine talks to, with IPs, ports, owning app, and request URLs/headers/parameters/body.
 
 ```
 sudo apt install libpcap-dev
 cargo build --release
-sudo ./target/release/aunty [interface]   # sniff: hostnames only (HTTPS is encrypted); no interface = pick in TUI
-./target/release/aunty --mitm             # proxy: full HTTPS URLs/headers/body, no root
+sudo ./target/release/whotalk [interface]   # sniff: hostnames only (HTTPS is encrypted); no interface = pick in TUI
+./target/release/whotalk --mitm             # proxy: full HTTPS URLs/headers/body, no root
 ```
 
 MITM mode listens on `127.0.0.1:8080` with a throwaway in-memory CA. On start it shows a Chrome launch command (Enter copies it; `b` reopens). It uses a throwaway profile with certificate errors ignored; never point your real profile at it.

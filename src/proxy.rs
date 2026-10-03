@@ -34,7 +34,7 @@ struct Ca {
 impl Ca {
     fn new() -> Res<Self> {
         let mut p = CertificateParams::default();
-        p.distinguished_name.push(DnType::CommonName, "aunty MITM CA");
+        p.distinguished_name.push(DnType::CommonName, "whotalk MITM CA");
         p.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         p.key_usages = vec![KeyUsagePurpose::KeyCertSign];
         let key = KeyPair::generate()?;
