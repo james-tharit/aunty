@@ -52,7 +52,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             (None, true) => "all".into(),
             (None, false) => "all (no app resolved yet)".into(),
         };
-        Paragraph::new(format!("app: {filter} · a change app · ↑↓/hover select · space pause · q quit"))
+        Paragraph::new(format!(
+            "app: {filter} · a change app · ↑↓{} select · m {} · space pause · q quit",
+            if app.mouse { "/hover" } else { "" },
+            if app.mouse { "mouse off (to select text)" } else { "mouse on" }
+        ))
             .style(Style::new().fg(Color::Gray))
     } else {
         Paragraph::new(WARN).style(Style::new().fg(Color::Yellow))

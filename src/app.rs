@@ -25,6 +25,7 @@ pub struct App {
     pub list: ListState,
     pub list_area: Rect, // set by ui, used for mouse hit-testing
     pub paused: bool,
+    pub mouse: bool, // mouse capture on (hover select); off lets the terminal select text
     pub mitm: bool, // proxy-only mode: show how to point a browser at it
     pub filter: Option<String>, // show only endpoints used by this app
 }
@@ -33,7 +34,7 @@ impl App {
     pub fn new(interfaces: Vec<String>, root: bool) -> Self {
         let mut picker = ListState::default();
         picker.select(Some(0));
-        Self { device: None, interfaces, picker, error: None, root, mitm: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
+        Self { device: None, interfaces, picker, error: None, root, mouse: true, mitm: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
     }
 
     pub fn add(&mut self, hit: Hit) {

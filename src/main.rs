@@ -85,6 +85,10 @@ fn run(
                         }
                     }
                     KeyCode::Char('a') => app.next_app(),
+                    KeyCode::Char('m') => {
+                        app.mouse = !app.mouse;
+                        if app.mouse { execute!(io::stdout(), EnableMouseCapture)? } else { execute!(io::stdout(), DisableMouseCapture)? }
+                    }
                     KeyCode::Char(' ') => app.paused = !app.paused,
                     _ => {}
                 },
