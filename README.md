@@ -1,5 +1,5 @@
 # aunty
-
+![usage](./aunty.gif)
 TUI that lists the hostnames your machine talks to, with IPs, ports, owning app, and request URLs/headers/parameters/body.
 
 ```
