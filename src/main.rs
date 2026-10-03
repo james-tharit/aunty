@@ -65,6 +65,28 @@ fn start(app: &mut app::App, name: String, tx: &mpsc::Sender<capture::Hit>) {
     }
 }
 
+fn b64(data: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    data.chunks(3)
+        .flat_map(|c| {
+            let n = c.iter().enumerate().fold(0u32, |a, (i, &b)| a | (b as u32) << (16 - 8 * i));
+            (0..4).map(move |i| if i <= c.len() { T[(n >> (18 - 6 * i)) as usize & 63] as char } else { '=' })
+        })
+        .collect()
+}
+
+/// Copy to the system clipboard via the OSC 52 escape (works over sudo/ssh; needs terminal support, e.g. kitty).
+fn copy(text: Option<String>) {
+    use std::io::Write;
+    let Some(text) = text else { return };
+    let _ = write!(io::stdout(), "\x1b]52;c;{}\x07", b64(text.as_bytes())).and_then(|_| io::stdout().flush());
+}
+
+#[test]
+fn base64() {
+    assert_eq!((b64(b"Man"), b64(b"Ma"), b64(b"M")), ("TWFu".into(), "TWE=".into(), "TQ==".into()));
+}
+
 fn run(
     term: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut app: app::App,
@@ -85,6 +107,8 @@ fn run(
                         }
                     }
                     KeyCode::Char('a') => app.next_app(),
+                    KeyCode::Char('y') => copy(app.selected().map(|e| ui::details(e).to_string())),
+                    KeyCode::Char('u') => copy(app.selected().map(|e| e.urls.last().unwrap_or(&e.host).clone())),
                     KeyCode::Char('m') => {
                         app.mouse = !app.mouse;
                         if app.mouse { execute!(io::stdout(), EnableMouseCapture)? } else { execute!(io::stdout(), DisableMouseCapture)? }

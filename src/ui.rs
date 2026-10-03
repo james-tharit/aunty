@@ -53,7 +53,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             (None, false) => "all (no app resolved yet)".into(),
         };
         Paragraph::new(format!(
-            "app: {filter} · a change app · ↑↓{} select · m {} · space pause · q quit",
+            "app: {filter} · a change app · ↑↓{} select · y copy · u copy url · m {} · space pause · q quit",
             if app.mouse { "/hover" } else { "" },
             if app.mouse { "mouse off (to select text)" } else { "mouse on" }
         ))
@@ -95,7 +95,7 @@ fn picker(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, bottom, &mut app.picker);
 }
 
-fn details(e: &Endpoint) -> Text<'static> {
+pub fn details(e: &Endpoint) -> Text<'static> {
     let head = |s: &str| Line::styled(s.to_string(), Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD));
     let kv = |k: &str, v: &str| Line::raw(format!("  {k}: {v}"));
     let mut t = vec![
