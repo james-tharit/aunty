@@ -26,17 +26,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if mitm {
         let l = std::net::TcpListener::bind(proxy::ADDR)?;
         l.set_nonblocking(true)?;
-        let dir = proxy::dir();
-        proxy::spawn(l, &dir, tx.clone()).map_err(|e| e.to_string())?;
-        let (profile, note) = proxy::firefox_profile(&dir);
-        app.browsers = vec![
-            app::BrowserCmd { name: "Firefox", cmd: format!("firefox --no-remote --profile {}", profile.display()), note },
-            app::BrowserCmd {
-                name: "Chrome",
-                cmd: format!("google-chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome", proxy::ADDR),
-                note: "Certificate errors are ignored in this throwaway profile.".into(),
-            },
-        ];
+        proxy::spawn(l, tx.clone()).map_err(|e| e.to_string())?;
+        app.browser_cmd = format!(
+            "google-chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome",
+            proxy::ADDR
+        );
         app.mitm = true;
         app.show_cmd = true;
         if iface.is_none() {
@@ -108,12 +102,8 @@ fn run(
             match event::read()? {
                 Event::Key(k) if app.show_cmd => match k.code {
                     KeyCode::Enter => {
-                        copy(Some(app.browsers[app.browser].cmd.clone()));
+                        copy(Some(app.browser_cmd.clone()));
                         app.copied = true;
-                    }
-                    KeyCode::Tab => {
-                        app.browser = (app.browser + 1) % app.browsers.len();
-                        app.copied = false;
                     }
                     KeyCode::Char('q') => return Ok(()),
                     _ => app.show_cmd = false,

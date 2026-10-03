@@ -1,8 +1,7 @@
 //! Local MITM proxy for your own browser: terminates TLS with a throwaway CA, reads each
 //! HTTP/1.1 request (full URL, headers, body), and forwards it to the real server over TLS.
-//! The CA is persisted in `dir()` so a browser profile can trust it once; it is trusted only
-//! in the throwaway Firefox profile (or Chrome with --ignore-certificate-errors), never system-wide.
-//! ponytail: CONNECT only, HTTP/1.1 only (ALPN forced), request side only; add responses when needed.
+//! ponytail: CONNECT only, HTTP/1.1 only (ALPN forced), request side only, CA is in-memory
+//! (browser must ignore cert errors); persist the CA / add responses when needed.
 use crate::{capture::{self, Hit}, proc};
 use rcgen::{BasicConstraints, Certificate, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
 use rustls::{
@@ -12,11 +11,7 @@ use rustls::{
 use std::{
     collections::HashMap,
     error::Error,
-    fs,
     net::SocketAddr,
-    os::unix::fs::OpenOptionsExt,
-    path::{Path, PathBuf},
-    process::Command,
     sync::{mpsc::Sender, Arc, Mutex},
     thread,
 };
@@ -29,44 +24,6 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 type Res<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 pub const ADDR: &str = "127.0.0.1:8080";
-const CA_NAME: &str = "aunty MITM CA";
-
-/// ~/.config/aunty: CA files and the Firefox profile.
-pub fn dir() -> PathBuf {
-    std::env::var_os("HOME").map_or("/tmp".into(), PathBuf::from).join(".config/aunty")
-}
-
-/// Create a throwaway Firefox profile that uses the proxy. Returns (profile dir, note about CA trust).
-pub fn firefox_profile(dir: &Path) -> (PathBuf, String) {
-    let prof = dir.join("firefox");
-    let (host, port) = ADDR.rsplit_once(':').unwrap();
-    let _ = fs::create_dir_all(&prof);
-    let _ = fs::write(
-        prof.join("user.js"),
-        format!(
-            "user_pref(\"network.proxy.type\", 1);\n\
-             user_pref(\"network.proxy.http\", \"{host}\");\nuser_pref(\"network.proxy.http_port\", {port});\n\
-             user_pref(\"network.proxy.ssl\", \"{host}\");\nuser_pref(\"network.proxy.ssl_port\", {port});\n\
-             user_pref(\"network.http.http3.enable\", false);\n\
-             user_pref(\"browser.shell.checkDefaultBrowser\", false);\n"
-        ),
-    );
-    // best effort: needs certutil (apt install libnss3-tools)
-    let db = format!("sql:{}", prof.display());
-    let ca = dir.join("ca.pem");
-    let certutil = |a: &[&str]| Command::new("certutil").args(a).output().is_ok_and(|o| o.status.success());
-    if !prof.join("cert9.db").exists() {
-        certutil(&["-N", "-d", &db, "--empty-password"]);
-    }
-    let trusted = certutil(&["-L", "-d", &db, "-n", CA_NAME])
-        || certutil(&["-A", "-n", CA_NAME, "-t", "C,,", "-i", &ca.to_string_lossy(), "-d", &db]);
-    let note = if trusted {
-        "CA already trusted in this profile.".into()
-    } else {
-        format!("First time only: Firefox > Settings > Certificates > View Certificates > Authorities > Import {} (trust for websites). Or: apt install libnss3-tools and restart aunty.", ca.display())
-    };
-    (prof, note)
-}
 
 struct Ca {
     cert: Certificate,
@@ -75,27 +32,13 @@ struct Ca {
 }
 
 impl Ca {
-    /// Load the CA from `dir`, or create and save it.
-    fn load_or_create(dir: &Path) -> Res<Self> {
-        fs::create_dir_all(dir)?;
-        let (pem_path, key_path) = (dir.join("ca.pem"), dir.join("ca.key"));
-        if let (Ok(pem), Ok(key)) = (fs::read_to_string(&pem_path), fs::read_to_string(&key_path)) {
-            let key = KeyPair::from_pem(&key)?;
-            // same subject + key as the saved cert, so leaves still chain to what the browser trusts
-            let cert = CertificateParams::from_ca_cert_pem(&pem)?.self_signed(&key)?;
-            return Ok(Self { cert, key, leaves: Default::default() });
-        }
+    fn new() -> Res<Self> {
         let mut p = CertificateParams::default();
-        p.distinguished_name.push(DnType::CommonName, CA_NAME);
+        p.distinguished_name.push(DnType::CommonName, "aunty MITM CA");
         p.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         p.key_usages = vec![KeyUsagePurpose::KeyCertSign];
         let key = KeyPair::generate()?;
-        let cert = p.self_signed(&key)?;
-        fs::write(&pem_path, cert.pem())?;
-        // the key can impersonate any site to a browser that trusts the CA: owner-only
-        use std::io::Write;
-        fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&key_path)?.write_all(key.serialize_pem().as_bytes())?;
-        Ok(Self { cert, key, leaves: Default::default() })
+        Ok(Self { cert: p.self_signed(&key)?, key, leaves: Default::default() })
     }
 
     /// TLS server config presenting a certificate for `host`, signed by our CA.
@@ -116,8 +59,8 @@ impl Ca {
     }
 }
 
-pub fn spawn(listener: std::net::TcpListener, dir: &Path, tx: Sender<Hit>) -> Res<()> {
-    let ca = Arc::new(Ca::load_or_create(dir)?);
+pub fn spawn(listener: std::net::TcpListener, tx: Sender<Hit>) -> Res<()> {
+    let ca = Arc::new(Ca::new()?);
     let mut cfg = ClientConfig::builder()
         .with_root_certificates(RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() })
         .with_no_client_auth();
@@ -179,15 +122,4 @@ async fn tunnel(c: &mut TcpStream, peer: SocketAddr, ca: &Ca, connector: &TlsCon
         r = tokio::io::copy(&mut sr, &mut cw) => { r?; }
     }
     Ok(())
-}
-
-#[test]
-fn ca_persists_across_loads() {
-    let d = std::env::temp_dir().join(format!("aunty-test-{}", std::process::id()));
-    Ca::load_or_create(&d).unwrap();
-    let (pem, key) = (fs::read(d.join("ca.pem")).unwrap(), fs::read(d.join("ca.key")).unwrap());
-    let ca = Ca::load_or_create(&d).unwrap();
-    assert_eq!((pem, key), (fs::read(d.join("ca.pem")).unwrap(), fs::read(d.join("ca.key")).unwrap()));
-    ca.config("example.com").unwrap();
-    fs::remove_dir_all(d).unwrap();
 }
