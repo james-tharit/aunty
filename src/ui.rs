@@ -40,7 +40,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     f.render_widget(pane, right);
 
     let footer = if app.root {
-        Paragraph::new("hover/↑↓ select · a app filter · space pause · q quit").style(Style::new().fg(Color::Gray))
+        let known = app.endpoints.iter().any(|e| !e.apps.is_empty());
+        let filter = match (&app.filter, known) {
+            (Some(f), _) => f.clone(),
+            (None, true) => "all".into(),
+            (None, false) => "all (no app resolved yet)".into(),
+        };
+        Paragraph::new(format!("app: {filter} · a change app · ↑↓/hover select · space pause · q quit"))
+            .style(Style::new().fg(Color::Gray))
     } else {
         Paragraph::new(WARN).style(Style::new().fg(Color::Yellow))
     };

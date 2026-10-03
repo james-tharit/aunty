@@ -32,3 +32,11 @@ fn finds_own_socket() {
     let name = app_for(true, s.local_addr().unwrap().port()).expect("owner found");
     assert!(std::env::current_exe().unwrap().file_name().unwrap().to_str().unwrap().starts_with(&name[..name.len().min(15)]));
 }
+
+#[cfg(test)]
+#[test]
+fn finds_own_tcp_client() {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let c = std::net::TcpStream::connect(l.local_addr().unwrap()).unwrap();
+    assert!(app_for(false, c.local_addr().unwrap().port()).is_some());
+}
