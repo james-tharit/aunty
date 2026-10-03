@@ -33,7 +33,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     f.render_stateful_widget(list, left, &mut app.list);
     app.list_area = left;
 
-    let text = app.selected().map(details).unwrap_or_else(|| Text::raw("waiting for traffic..."));
+    let text = app.selected().map(details).unwrap_or_else(|| {
+        Text::raw(if app.mitm {
+            "waiting for traffic...\n\nStart a browser through the proxy:\n  chrome --proxy-server=127.0.0.1:8080 --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome"
+        } else {
+            "waiting for traffic..."
+        })
+    });
     let pane = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL).title(" Details "))
         .wrap(Wrap { trim: false });
@@ -103,6 +109,12 @@ fn details(e: &Endpoint) -> Text<'static> {
     t.push(head("Ports"));
     t.push(Line::raw(format!("  {}", e.ports.iter().map(u16::to_string).collect::<Vec<_>>().join(", "))));
     t.push(Line::raw(""));
+
+    if !e.urls.is_empty() {
+        t.push(head("Recent URLs"));
+        t.extend(e.urls.iter().rev().take(15).map(|u| Line::raw(format!("  {u}"))));
+        t.push(Line::raw(""));
+    }
 
     match &e.http {
         Some(r) => {

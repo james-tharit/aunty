@@ -9,6 +9,7 @@ pub struct Endpoint {
     pub ports: BTreeSet<u16>,
     pub sources: BTreeSet<&'static str>,
     pub apps: BTreeSet<String>,
+    pub urls: Vec<String>, // recent requested URLs (HTTP and MITM)
     pub packets: u32,
     pub bytes: u64,
     pub http: Option<Http>, // latest plain-HTTP request
@@ -24,6 +25,7 @@ pub struct App {
     pub list: ListState,
     pub list_area: Rect, // set by ui, used for mouse hit-testing
     pub paused: bool,
+    pub mitm: bool, // proxy-only mode: show how to point a browser at it
     pub filter: Option<String>, // show only endpoints used by this app
 }
 
@@ -31,7 +33,7 @@ impl App {
     pub fn new(interfaces: Vec<String>, root: bool) -> Self {
         let mut picker = ListState::default();
         picker.select(Some(0));
-        Self { device: None, interfaces, picker, error: None, root, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
+        Self { device: None, interfaces, picker, error: None, root, mitm: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
     }
 
     pub fn add(&mut self, hit: Hit) {
@@ -41,7 +43,7 @@ impl App {
             None => {
                 self.endpoints.push(Endpoint {
                     host: hit.host, ips: Default::default(), ports: Default::default(),
-                    sources: Default::default(), apps: Default::default(), packets: 0, bytes: 0, http: None,
+                    sources: Default::default(), apps: Default::default(), urls: vec![], packets: 0, bytes: 0, http: None,
                 });
                 self.endpoints.len() - 1
             }
@@ -53,6 +55,13 @@ impl App {
         e.apps.extend(hit.app);
         e.packets += 1;
         e.bytes += hit.bytes as u64;
+        if let Some(r) = &hit.http {
+            let url = format!("{}://{}{}", if hit.source == "HTTP" { "http" } else { "https" }, e.host, r.target);
+            if e.urls.last() != Some(&url) {
+                e.urls.push(url);
+                if e.urls.len() > 100 { e.urls.remove(0); }
+            }
+        }
         e.http = hit.http.or(e.http.take());
         if self.list.selected().is_none() { self.list.select(Some(0)); }
     }

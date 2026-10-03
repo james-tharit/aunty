@@ -24,6 +24,7 @@ pub struct Hit {
 pub struct Http {
     pub method: String,
     pub path: String,
+    pub target: String, // path + raw query string
     pub query: Vec<(String, String)>,
     pub headers: Vec<(String, String)>,
     pub body: String,
@@ -109,7 +110,7 @@ fn sni(mut b: &[u8]) -> Option<String> {
 }
 
 /// Plain HTTP/1.x request: (host, parsed request). Body is whatever fits in this packet.
-fn http(b: &[u8]) -> Option<(String, Http)> {
+pub fn http(b: &[u8]) -> Option<(String, Http)> {
     let s = String::from_utf8_lossy(b);
     let (head, body) = s.split_once("\r\n\r\n").unwrap_or((s.as_ref(), ""));
     let mut lines = head.lines();
@@ -128,7 +129,7 @@ fn http(b: &[u8]) -> Option<(String, Http)> {
         .map(|p| p.split_once('=').unwrap_or((p, "")))
         .map(|(k, v)| (k.into(), v.into()))
         .collect();
-    Some((host, Http { method: method.into(), path: path.into(), query, headers, body: body.into() }))
+    Some((host, Http { method: method.into(), path: path.into(), target: target.into(), query, headers, body: body.into() }))
 }
 
 /// First question name of a DNS query.

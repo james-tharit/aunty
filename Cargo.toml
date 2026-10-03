@@ -8,3 +8,8 @@ pcap = "2.4.0"
 etherparse = "0.18"
 ratatui = "0.28"
 crossterm = "0.28"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "ring"] }
+webpki-roots = "0.26"

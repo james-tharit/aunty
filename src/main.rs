@@ -1,9 +1,11 @@
 //! Passive sniffer TUI: lists each hostname the machine talks to,
 //! with IPs, ports and (for plain HTTP) request headers/params/body.
 //! Usage: sudo aunty [interface]   (no interface: pick one in the TUI)
+//!        aunty --mitm              (proxy only, no root; add an interface to sniff too)
 mod app;
 mod capture;
 mod proc;
+mod proxy;
 mod ui;
 
 use crossterm::{
@@ -16,8 +18,21 @@ use std::{io, sync::mpsc, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx, rx) = mpsc::channel();
-    let mut app = app::App::new(capture::interfaces()?, unsafe { geteuid() } == 0);
-    if let Some(name) = std::env::args().nth(1) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mitm = args.iter().any(|a| a == "--mitm");
+    let iface = args.into_iter().find(|a| !a.starts_with("--"));
+    // proxy-only mode needs no root
+    let mut app = app::App::new(capture::interfaces()?, unsafe { geteuid() } == 0 || (mitm && iface.is_none()));
+    if mitm {
+        let l = std::net::TcpListener::bind(PROXY_ADDR)?;
+        l.set_nonblocking(true)?;
+        proxy::spawn(l, tx.clone()).map_err(|e| e.to_string())?;
+        app.mitm = true;
+        if iface.is_none() {
+            app.device = Some(format!("MITM proxy {PROXY_ADDR}"));
+        }
+    }
+    if let Some(name) = iface {
         start(&mut app, name, &tx);
     }
 
@@ -31,6 +46,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
+
+const PROXY_ADDR: &str = "127.0.0.1:8080";
 
 extern "C" {
     fn geteuid() -> u32;
