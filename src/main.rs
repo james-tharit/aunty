@@ -118,8 +118,7 @@ fn run(
                         }
                     }
                     KeyCode::Char('a') => app.next_app(),
-                    KeyCode::Char('y') => copy(app.selected().map(|e| ui::details(e).to_string())),
-                    KeyCode::Char('u') => copy(app.selected().map(|e| e.urls.last().unwrap_or(&e.host).clone())),
+                    KeyCode::Char('c') => app.clear(),
                     KeyCode::Char('b') if app.mitm => {
                         app.show_cmd = true;
                         app.copied = false;

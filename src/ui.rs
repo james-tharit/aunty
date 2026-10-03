@@ -8,16 +8,17 @@ use ratatui::{
 };
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let [main, foot] = Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(f.area());
+    let [top, main, foot] = Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(1)]).areas(f.area());
+    let (status, color) = if app.paused { ("PAUSE", Color::Yellow) } else { ("LISTENING", Color::Green) };
+    f.render_widget(Paragraph::new(format!(" {status}")).style(Style::new().fg(color).add_modifier(Modifier::BOLD)), top);
     let [left, right] = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(main);
 
     let title = format!(
-        " {} · app: {} · {} endpoints · {} packets seen{} ",
+        " {} · app: {} · {} endpoints · {} packets seen ",
         app.device.as_deref().unwrap_or("-"),
         app.filter.as_deref().unwrap_or("all"),
         app.visible().len(),
-        crate::capture::SEEN.load(std::sync::atomic::Ordering::Relaxed),
-        if app.paused { " · PAUSED" } else { "" }
+        crate::capture::SEEN.load(std::sync::atomic::Ordering::Relaxed)
     );
     let items: Vec<ListItem> = app
         .visible()
@@ -49,7 +50,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             (None, false) => "all (no app resolved yet)".into(),
         };
         Paragraph::new(format!(
-            "app: {filter} · a change app · ↑↓/hover select · y copy · u copy url{} · space pause · q quit",
+            "app: {filter} · a change app · ↑↓/hover select · c clear{} · space pause · q quit",
             if app.mitm { " · b browser cmd" } else { "" }
         ))
             .style(Style::new().fg(Color::Gray))

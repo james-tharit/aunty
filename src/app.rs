@@ -69,6 +69,12 @@ impl App {
         if self.list.selected().is_none() { self.list.select(Some(0)); }
     }
 
+    pub fn clear(&mut self) {
+        self.endpoints.clear();
+        self.filter = None;
+        self.list.select(None);
+    }
+
     /// Endpoints passing the app filter; list indices refer to this.
     pub fn visible(&self) -> Vec<&Endpoint> {
         self.endpoints.iter().filter(|e| self.filter.as_ref().map_or(true, |f| e.apps.contains(f))).collect()

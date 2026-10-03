@@ -11,6 +11,6 @@ sudo ./target/release/aunty [interface]   # sniff: hostnames only (HTTPS is encr
 
 MITM mode listens on `127.0.0.1:8080` with a throwaway in-memory CA. On start it shows a Chrome launch command (Enter copies it; `b` reopens). It uses a throwaway profile with certificate errors ignored; never point your real profile at it.
 
-Keys: mouse hover or ↑↓ select, `a` cycle app filter, `y` copy details / `u` copy URL to clipboard (OSC 52, e.g. kitty), `b` browser launch command (MITM), space pause, q quit.
+Keys: mouse hover or ↑↓ select, `a` cycle app filter, `c` clear data, `b` browser launch command (MITM), space pause, q quit.
 
 Limits: sniffer sees hostnames only for HTTPS and does not parse HTTP/3 (QUIC); the proxy handles HTTPS (CONNECT) over HTTP/1.1, requests only, not plain-HTTP proxying. App names come from `/proc` (Linux, best effort).
