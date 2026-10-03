@@ -1,100 +1,87 @@
+//! Passive sniffer TUI: lists each hostname the machine talks to,
+//! with IPs, ports and (for plain HTTP) request headers/params/body.
+//! Usage: sudo aunty [interface]   (no interface: pick one in the TUI)
 mod app;
-mod packet;
-mod packet_capture;
+mod capture;
 mod ui;
 
-use app::App;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
-use std::sync::mpsc;
-use std::time::Duration;
-use std::io;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::{io, sync::mpsc, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
-
-    // Create the application
-    let mut app = App::new(500); // Keep last 500 packets in memory
-
-    // Create communication channel
-    let (tx, rx) = mpsc::channel::<packet::PacketInfo>();
-
-    // Start the packet capture thread
-    packet_capture::start_capture_thread(tx);
-
-    // Main event loop
-    let result = run_app(&mut terminal, &mut app, rx);
-
-    // Cleanup terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen
-    )?;
-    terminal.show_cursor()?;
-
-    if let Err(e) = result {
-        println!("Error: {}", e);
+    let (tx, rx) = mpsc::channel();
+    let mut app = app::App::new(capture::interfaces()?, unsafe { geteuid() } == 0);
+    if let Some(name) = std::env::args().nth(1) {
+        start(&mut app, name, &tx);
     }
 
-    Ok(())
+    enable_raw_mode()?;
+    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
+
+    let result = run(&mut term, app, tx, rx);
+
+    disable_raw_mode()?;
+    execute!(term.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    result
 }
 
-fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    app: &mut App,
-    rx: std::sync::mpsc::Receiver<packet::PacketInfo>,
+extern "C" {
+    fn geteuid() -> u32;
+}
+
+/// Open `name` and start capturing; on failure stay in the picker and show why.
+fn start(app: &mut app::App, name: String, tx: &mpsc::Sender<capture::Hit>) {
+    match capture::open(&name) {
+        Ok(cap) => {
+            capture::spawn(cap, tx.clone());
+            app.error = None;
+            app.device = Some(name);
+        }
+        Err(e) => app.error = Some(format!("{name}: {e}")),
+    }
+}
+
+fn run(
+    term: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    mut app: app::App,
+    tx: mpsc::Sender<capture::Hit>,
+    rx: mpsc::Receiver<capture::Hit>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
-        // Render the UI
-        terminal.draw(|f| {
-            ui::draw(f, app);
-        })?;
-
-        // Non-blocking input event loop with timeout
-        if crossterm::event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        app.should_quit = true;
+        term.draw(|f| ui::draw(f, &mut app))?;
+        if event::poll(Duration::from_millis(100))? {
+            match event::read()? {
+                Event::Key(k) => match k.code {
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                    KeyCode::Up | KeyCode::Char('k') => app.step(-1),
+                    KeyCode::Down | KeyCode::Char('j') => app.step(1),
+                    KeyCode::Enter if app.device.is_none() => {
+                        if let Some(name) = app.picker.selected().and_then(|i| app.interfaces.get(i)).cloned() {
+                            start(&mut app, name, &tx);
+                        }
                     }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        app.select_up();
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        app.select_down();
-                    }
-                    KeyCode::Char(' ') => {
-                        app.toggle_pause();
-                    }
+                    KeyCode::Char(' ') => app.paused = !app.paused,
                     _ => {}
-                }
+                },
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::Moved | MouseEventKind::Down(MouseButton::Left) if app.device.is_some() => {
+                        app.hover(m.column, m.row)
+                    }
+                    MouseEventKind::ScrollUp => app.step(-1),
+                    MouseEventKind::ScrollDown => app.step(1),
+                    _ => {}
+                },
+                _ => {}
             }
         }
-
-        // Process incoming packets from the capture thread
-        // Use try_recv to avoid blocking
-        while let Ok(packet) = rx.try_recv() {
-            app.add_packet(packet);
-        }
-
-        if app.should_quit {
-            break;
+        while let Ok(hit) = rx.try_recv() {
+            app.add(hit);
         }
     }
-
-    Ok(())
 }
