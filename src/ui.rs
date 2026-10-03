@@ -162,3 +162,14 @@ pub fn details(e: &Endpoint) -> Text<'static> {
     }
     Text::from(t)
 }
+
+#[test]
+fn browser_cmd_overlay_renders() {
+    let mut app = App::new(vec![], true);
+    app.device = Some("proxy".into());
+    app.show_cmd = true;
+    let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 25)).unwrap();
+    term.draw(|f| draw(f, &mut app)).unwrap();
+    let screen: String = term.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+    assert!(screen.contains("Start a browser through the proxy") && screen.contains("--proxy-server=127.0.0.1:8080"));
+}
