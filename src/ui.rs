@@ -1,4 +1,4 @@
-use crate::app::{App, Endpoint};
+use crate::app::{App, Endpoint, BROWSER_CMD};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -34,11 +34,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.list_area = left;
 
     let text = app.selected().map(details).unwrap_or_else(|| {
-        Text::raw(if app.mitm {
-            "waiting for traffic...\n\nStart a browser through the proxy:\n  chrome --proxy-server=127.0.0.1:8080 --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome"
-        } else {
-            "waiting for traffic..."
-        })
+        Text::raw("waiting for traffic...")
     });
     let pane = Paragraph::new(text)
         .block(Block::default().borders(Borders::ALL).title(" Details "))
@@ -53,9 +49,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             (None, false) => "all (no app resolved yet)".into(),
         };
         Paragraph::new(format!(
-            "app: {filter} · a change app · ↑↓{} select · y copy · u copy url · m {} · space pause · q quit",
-            if app.mouse { "/hover" } else { "" },
-            if app.mouse { "mouse off (to select text)" } else { "mouse on" }
+            "app: {filter} · a change app · ↑↓/hover select · y copy · u copy url{} · space pause · q quit",
+            if app.mitm { " · b browser cmd" } else { "" }
         ))
             .style(Style::new().fg(Color::Gray))
     } else {
@@ -65,15 +60,37 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     if app.device.is_none() {
         picker(f, app);
+    } else if app.show_cmd {
+        cmd_box(f, app);
     }
+}
+
+fn centered(a: Rect, w: u16, h: u16) -> Rect {
+    let (w, h) = (w.min(a.width), h.min(a.height));
+    Rect { x: a.x + (a.width - w) / 2, y: a.y + (a.height - h) / 2, width: w, height: h }
+}
+
+fn cmd_box(f: &mut Frame, app: &App) {
+    let area = centered(f.area(), 80, 10);
+    let block = Block::default().borders(Borders::ALL).title(" Start a browser through the proxy ");
+    let inner = block.inner(area);
+    f.render_widget(Clear, area);
+    f.render_widget(block, area);
+    let status = if app.copied { "✓ copied to clipboard" } else { "Enter copy to clipboard" };
+    let text = vec![
+        Line::raw("Run this in another terminal (throwaway profile, not your real one):"),
+        Line::raw(""),
+        Line::styled(BROWSER_CMD, Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Line::raw(""),
+        Line::styled(format!("{status} · any other key closes · b reopens"), Style::new().fg(Color::Gray)),
+    ];
+    f.render_widget(Paragraph::new(text).wrap(Wrap { trim: false }), inner);
 }
 
 const WARN: &str = "⚠ not running as root: capture will likely fail. Re-run with sudo.";
 
 fn picker(f: &mut Frame, app: &mut App) {
-    let a = f.area();
-    let (w, h) = (60.min(a.width), (app.interfaces.len() as u16 + 10).min(a.height));
-    let area = Rect { x: a.x + (a.width - w) / 2, y: a.y + (a.height - h) / 2, width: w, height: h };
+    let area = centered(f.area(), 60, app.interfaces.len() as u16 + 10);
     let block = Block::default().borders(Borders::ALL).title(" Select interface · ↑↓ Enter · q quit ");
     let inner = block.inner(area);
     f.render_widget(Clear, area);

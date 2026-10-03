@@ -28,6 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         l.set_nonblocking(true)?;
         proxy::spawn(l, tx.clone()).map_err(|e| e.to_string())?;
         app.mitm = true;
+        app.show_cmd = true;
         if iface.is_none() {
             app.device = Some(format!("MITM proxy {PROXY_ADDR}"));
         }
@@ -97,6 +98,14 @@ fn run(
         term.draw(|f| ui::draw(f, &mut app))?;
         if event::poll(Duration::from_millis(100))? {
             match event::read()? {
+                Event::Key(k) if app.show_cmd => match k.code {
+                    KeyCode::Enter => {
+                        copy(Some(app::BROWSER_CMD.into()));
+                        app.copied = true;
+                    }
+                    KeyCode::Char('q') => return Ok(()),
+                    _ => app.show_cmd = false,
+                },
                 Event::Key(k) => match k.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Up | KeyCode::Char('k') => app.step(-1),
@@ -109,9 +118,9 @@ fn run(
                     KeyCode::Char('a') => app.next_app(),
                     KeyCode::Char('y') => copy(app.selected().map(|e| ui::details(e).to_string())),
                     KeyCode::Char('u') => copy(app.selected().map(|e| e.urls.last().unwrap_or(&e.host).clone())),
-                    KeyCode::Char('m') => {
-                        app.mouse = !app.mouse;
-                        if app.mouse { execute!(io::stdout(), EnableMouseCapture)? } else { execute!(io::stdout(), DisableMouseCapture)? }
+                    KeyCode::Char('b') if app.mitm => {
+                        app.show_cmd = true;
+                        app.copied = false;
                     }
                     KeyCode::Char(' ') => app.paused = !app.paused,
                     _ => {}
