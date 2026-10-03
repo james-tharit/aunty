@@ -24,6 +24,9 @@ pub struct App {
     pub endpoints: Vec<Endpoint>,
     pub list: ListState,
     pub list_area: Rect, // set by ui, used for mouse hit-testing
+    pub detail_area: Rect,
+    pub detail_scroll: u16,
+    pub detail_for: Option<usize>, // selection the scroll offset belongs to
     pub paused: bool,
     pub mitm: bool,
     pub show_cmd: bool, // overlay with the browser launch command
@@ -36,7 +39,7 @@ impl App {
     pub fn new(interfaces: Vec<String>, root: bool) -> Self {
         let mut picker = ListState::default();
         picker.select(Some(0));
-        Self { device: None, interfaces, picker, error: None, root, mitm: false, show_cmd: false, browser_cmd: String::new(), copied: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), paused: false }
+        Self { device: None, interfaces, picker, error: None, root, mitm: false, show_cmd: false, browser_cmd: String::new(), copied: false, filter: None, endpoints: vec![], list: ListState::default(), list_area: Rect::default(), detail_area: Rect::default(), detail_scroll: 0, detail_for: None, paused: false }
     }
 
     pub fn add(&mut self, hit: Hit) {

@@ -117,6 +117,8 @@ fn run(
                             start(&mut app, name, &tx);
                         }
                     }
+                    KeyCode::PageUp => app.detail_scroll = app.detail_scroll.saturating_sub(10),
+                    KeyCode::PageDown => app.detail_scroll = app.detail_scroll.saturating_add(10),
                     KeyCode::Char('a') => app.next_app(),
                     KeyCode::Char('c') => app.clear(),
                     KeyCode::Char('b') if app.mitm => {
@@ -130,8 +132,14 @@ fn run(
                     MouseEventKind::Moved | MouseEventKind::Down(MouseButton::Left) if app.device.is_some() => {
                         app.hover(m.column, m.row)
                     }
-                    MouseEventKind::ScrollUp => app.step(-1),
-                    MouseEventKind::ScrollDown => app.step(1),
+                    MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                        let d: i16 = if m.kind == MouseEventKind::ScrollUp { -1 } else { 1 };
+                        if app.detail_area.contains((m.column, m.row).into()) {
+                            app.detail_scroll = app.detail_scroll.saturating_add_signed(d * 3);
+                        } else {
+                            app.step(d as isize);
+                        }
+                    }
                     _ => {}
                 },
                 _ => {}

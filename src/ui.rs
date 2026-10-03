@@ -37,7 +37,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let text = app.selected().map(details).unwrap_or_else(|| {
         Text::raw("waiting for traffic...")
     });
+    if app.detail_for != app.list.selected() {
+        app.detail_for = app.list.selected();
+        app.detail_scroll = 0;
+    }
+    app.detail_scroll = app.detail_scroll.min(text.lines.len().saturating_sub(1) as u16);
+    app.detail_area = right;
     let pane = Paragraph::new(text)
+        .scroll((app.detail_scroll, 0))
         .block(Block::default().borders(Borders::ALL).title(" Details "))
         .wrap(Wrap { trim: false });
     f.render_widget(pane, right);
