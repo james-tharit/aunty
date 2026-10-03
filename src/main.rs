@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app::BrowserCmd { name: "Firefox", cmd: format!("firefox --no-remote --profile {}", profile.display()), note },
             app::BrowserCmd {
                 name: "Chrome",
-                cmd: format!("chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome", proxy::ADDR),
+                cmd: format!("google-chrome --proxy-server={} --ignore-certificate-errors --user-data-dir=/tmp/aunty-chrome", proxy::ADDR),
                 note: "Certificate errors are ignored in this throwaway profile.".into(),
             },
         ];
